@@ -1,0 +1,21 @@
+name: Wens of bug
+description: Iets toevoegen, veranderen of iets werkt niet
+body:
+  - type: dropdown
+    id: soort
+    attributes:
+      label: Soort
+      options: [Uitbreiding, Bug]
+    validations:
+      required: true
+  - type: textarea
+    id: wat
+    attributes:
+      label: Wat wil je, of wat gaat er mis?
+      description: Screenshots kun je hier direct in plakken.
+    validations:
+      required: true
+  - type: input
+    id: wie
+    attributes:
+      label: Van wie komt dit?

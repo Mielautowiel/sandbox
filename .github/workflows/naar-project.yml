@@ -1,0 +1,87 @@
+# Kolom "Naar project": maakt (indien nodig) een privé-repo vanuit de template en verhuist het kaartje erheen.
+name: Naar project
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  starten:
+    if: github.event.sender.login == github.repository_owner && github.event.label.name == 'fase:naar-project'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+      NR: ${{ github.event.issue.number }}
+      TITEL: ${{ github.event.issue.title }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Projectnaam en stack lezen
+        id: p
+        run: |
+          gh issue view "$NR" -R "$REPO" --json body,comments --jq '[.body] + [.comments[].body] | join("\n")' > tekst.txt
+          NAAM=$(grep -E '^Project: [a-z0-9][a-z0-9-]*\s*$' tekst.txt | tail -1 | awk '{print $2}')
+          STACK=$(grep -E '^Stack: (web|python)\s*$' tekst.txt | tail -1 | awk '{print $2}')
+          if [ -z "$NAAM" ]; then
+            gh issue comment "$NR" -R "$REPO" --body "⚠️ Ik weet niet in welk project dit moet. Zet in een reactie een regel \`Project: naam\` (en eventueel \`Stack: web\` of \`Stack: python\`) en zet het label opnieuw."
+            exit 1
+          fi
+          echo "naam=$NAAM" >> "$GITHUB_OUTPUT"
+          echo "stack=${STACK:-web}" >> "$GITHUB_OUTPUT"
+      - name: Repo aanmaken als die nog niet bestaat
+        env:
+          NAAM: ${{ steps.p.outputs.naam }}
+          STACK: ${{ steps.p.outputs.stack }}
+          S_CLAUDE: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          S_PROJECT: ${{ secrets.PROJECT_TOKEN }}
+          S_CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          S_CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          DOEL="$OWNER/$NAAM"
+          if gh repo view "$DOEL" >/dev/null 2>&1; then echo "Bestaat al: $DOEL"; exit 0; fi
+          gh repo create "$DOEL" --private --description "$TITEL"
+          mkdir nieuw
+          cp -r template/basis/. nieuw/
+          cp -r "template/$STACK/." nieuw/
+          {
+            echo "# Idee"; echo
+            echo "Uit de ideeënbus: https://github.com/$REPO/issues/$NR"; echo
+            cat tekst.txt
+          } > nieuw/docs/idee.md
+          SAFE_TITEL=$(printf '%s' "$TITEL" | sed 's/[&/\]/\\&/g')
+          grep -rl '__PROJECT__\|__HUB__\|__STACK__\|__TITEL__' nieuw | xargs sed -i \
+            -e "s/__PROJECT__/$NAAM/g" -e "s#__HUB__#$REPO#g" -e "s/__STACK__/$STACK/g" -e "s/__TITEL__/$SAFE_TITEL/g"
+          cd nieuw
+          git init -q -b main
+          git config user.name "werkplaats-agent"; git config user.email "agent@werkplaats.local"
+          git add . && git commit -qm "Start project from $STACK template"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/$DOEL.git" main
+          cd ..
+          gh secret set CLAUDE_CODE_OAUTH_TOKEN -R "$DOEL" --body "$S_CLAUDE"
+          gh secret set PROJECT_TOKEN -R "$DOEL" --body "$S_PROJECT"
+          if [ -n "$S_CF_TOKEN" ]; then
+            gh secret set CLOUDFLARE_API_TOKEN -R "$DOEL" --body "$S_CF_TOKEN"
+            gh secret set CLOUDFLARE_ACCOUNT_ID -R "$DOEL" --body "$S_CF_ACCOUNT"
+          fi
+          bash .github/scripts/labels.sh "$DOEL"
+      - name: Kaartje verhuizen
+        env:
+          NAAM: ${{ steps.p.outputs.naam }}
+        run: |
+          DOEL="$OWNER/$NAAM"
+          URL=$(gh issue transfer "$NR" "$DOEL")
+          NIEUW="${URL##*/}"
+          sleep 3
+          gh issue edit "$NIEUW" -R "$DOEL" --add-label fase:naar-project,agent:klaar || true
+          bash .github/scripts/bord.sh "$DOEL" "$NIEUW" "Naar project"
+          gh issue comment "$NIEUW" -R "$DOEL" --body "📦 Dit kaartje staat nu in project **$NAAM**: https://github.com/$DOEL
+
+          Volgende stap (jij kiest): label \`fase:prototype\`, \`fase:ontwerp\` of bij een bug \`fase:bouwen\`."
+      - name: Fout melden
+        if: failure()
+        run: |
+          gh issue comment "$NR" -R "$REPO" --body "⚠️ Naar project is mislukt. Bekijk de run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

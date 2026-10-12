@@ -1,0 +1,82 @@
+# Start de agent die bij een kolom hoort, zodra JIJ het fase-label zet.
+name: Agent
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: agent-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  agent:
+    if: >-
+      github.event.sender.login == github.repository_owner &&
+      contains(fromJSON('["fase:inventariseren","fase:prototype","fase:ontwerp","fase:bouwen","fase:testen","fase:review"]'), github.event.label.name)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+      REPO: ${{ github.repository }}
+      NR: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PROJECT_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q pytest
+      - name: Welke agent?
+        id: a
+        env:
+          CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          case "${{ github.event.label.name }}" in
+            fase:inventariseren) echo "agent=analist" >> "$GITHUB_OUTPUT" ;;
+            fase:prototype) echo "agent=prototyper" >> "$GITHUB_OUTPUT" ;;
+            fase:ontwerp) echo "agent=ontwerper" >> "$GITHUB_OUTPUT" ;;
+            fase:bouwen) echo "agent=bouwer" >> "$GITHUB_OUTPUT" ;;
+            fase:testen) echo "agent=tester" >> "$GITHUB_OUTPUT" ;;
+            fase:review) echo "agent=reviewer" >> "$GITHUB_OUTPUT" ;;
+          esac
+          if [ -n "$CF" ]; then echo "pages=https://${{ github.event.repository.name }}.pages.dev" >> "$GITHUB_OUTPUT"; fi
+      - name: Kaartje op "bezig"
+        run: gh issue edit "$NR" -R "$REPO" --add-label agent:bezig --remove-label agent:klaar --remove-label agent:fout || true
+      - name: Agent aan het werk
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PAGES_URL: ${{ steps.a.outputs.pages }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Je werkt als de agent **${{ steps.a.outputs.agent }}** van de werkplaats.
+            Repository: ${{ github.repository }} — issue #${{ github.event.issue.number }}: "${{ github.event.issue.title }}"
+            Online adres van dit project (leeg = geen hosting): ${{ steps.a.outputs.pages }}
+
+            1. Lees CLAUDE.md en daarna .claude/agents/${{ steps.a.outputs.agent }}.md. Volg die instructies precies.
+            2. Lees het issue met alle reacties: gh issue view ${{ github.event.issue.number }} --comments
+            3. Doe alleen het werk van jouw rol. Zet zelf GEEN fase-labels en verplaats geen kaartjes.
+            4. Sluit af met precies één reactie op het issue (gh issue comment), zoals je instructies beschrijven.
+          claude_args: >-
+            --max-turns 80
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(gh:*),Bash(git:*),Bash(bash:*),Bash(node:*),Bash(npm:*),Bash(npx:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(curl:*),Bash(ls:*),Bash(cat:*),Bash(cp:*),Bash(mv:*),Bash(mkdir:*),Bash(sed:*),Bash(grep:*),Bash(find:*),Bash(jq:*)"
+      - name: Kaartje op "klaar"
+        if: success()
+        run: gh issue edit "$NR" -R "$REPO" --add-label agent:klaar --remove-label agent:bezig
+      - name: Kaartje op "fout"
+        if: failure()
+        run: |
+          gh issue edit "$NR" -R "$REPO" --add-label agent:fout --remove-label agent:bezig || true
+          gh issue comment "$NR" -R "$REPO" --body "⚠️ De agent liep vast. Bekijk de run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} — zet het label opnieuw om het nog eens te proberen."
