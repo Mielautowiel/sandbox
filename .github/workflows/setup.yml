@@ -36,8 +36,8 @@ jobs:
           else
             echo "Bord bestaat al"
           fi
-          HEEFT_FASE=$(gh api graphql -f query='query($p:ID!){node(id:$p){... on ProjectV2{field(name:"Fase"){... on ProjectV2SingleSelectField{id}}}}}' \
-            -f p="$PID" --jq '.data.node.field.id // empty')
+          HEEFT_FASE=$(gh api graphql -f query='query($p:ID!){node(id:$p){... on ProjectV2{fields(first:50){nodes{... on ProjectV2SingleSelectField{id name}}}}}}' \
+            -f p="$PID" --jq '[.data.node.fields.nodes[] | select(.name=="Fase") | .id][0] // empty')
           if [ -z "$HEEFT_FASE" ]; then
             OPTIES=$(echo "$KOLOMMEN" | jq -R 'split(",") | map({name: ., color: "GRAY", description: ""})')
             jq -n --arg p "$PID" --argjson o "$OPTIES" \
