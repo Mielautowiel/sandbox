@@ -1,8 +1,9 @@
-# Start de agent die bij een kolom hoort, zodra JIJ het fase-label zet.
+# Kies een agent op een ticket door het label "agent: prototype", "agent: ontwerp" of "agent: realiseren" te zetten.
+# De agent doet zijn werk; daarna draaien de tests en wordt het bij groen automatisch gemerged naar main.
 name: Agent
 on:
   issues:
-    types: [labeled]
+    types: [opened, labeled]
 
 permissions:
   contents: write
@@ -10,26 +11,38 @@ permissions:
   pull-requests: write
   id-token: write
 
-concurrency:
-  group: agent-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
+  labels:
+    # Zorgt dat de agent-labels bestaan (bij het eerste ticket in een nieuwe repo).
+    if: github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      R: ${{ github.repository }}
+    steps:
+      - run: |
+          gh label create "agent: prototype" -R "$R" --color 8957e5 --description "Agent maakt een klikbaar prototype" --force
+          gh label create "agent: ontwerp" -R "$R" --color fbca04 --description "Agent werkt het idee uit tot ontwerp en takenlijst" --force
+          gh label create "agent: realiseren" -R "$R" --color 0e8a16 --description "Agent bouwt het, met tests" --force
+
   agent:
     if: >-
-      github.event.sender.login == github.repository_owner &&
-      contains(fromJSON('["fase:inventariseren","fase:prototype","fase:ontwerp","fase:bouwen","fase:testen","fase:review"]'), github.event.label.name)
+      github.event.action == 'labeled' &&
+      startsWith(github.event.label.name, 'agent: ') &&
+      github.event.sender.login == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    concurrency: agent-${{ github.event.issue.number }}
     env:
-      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
-      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
       NR: ${{ github.event.issue.number }}
+      TITEL: ${{ github.event.issue.title }}
+      LABEL: ${{ github.event.label.name }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.PROJECT_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -37,46 +50,68 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -q pytest
-      - name: Welke agent?
-        id: a
-        env:
-          CF: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Voorbereiden
+        id: v
         run: |
-          case "${{ github.event.label.name }}" in
-            fase:inventariseren) echo "agent=analist" >> "$GITHUB_OUTPUT" ;;
-            fase:prototype) echo "agent=prototyper" >> "$GITHUB_OUTPUT" ;;
-            fase:ontwerp) echo "agent=ontwerper" >> "$GITHUB_OUTPUT" ;;
-            fase:bouwen) echo "agent=bouwer" >> "$GITHUB_OUTPUT" ;;
-            fase:testen) echo "agent=tester" >> "$GITHUB_OUTPUT" ;;
-            fase:review) echo "agent=reviewer" >> "$GITHUB_OUTPUT" ;;
-          esac
-          if [ -n "$CF" ]; then echo "pages=https://${{ github.event.repository.name }}.pages.dev" >> "$GITHUB_OUTPUT"; fi
-      - name: Kaartje op "bezig"
-        run: gh issue edit "$NR" -R "$REPO" --add-label agent:bezig --remove-label agent:klaar --remove-label agent:fout || true
+          AGENT="${LABEL#agent: }"
+          if [ ! -f ".claude/agents/$AGENT.md" ]; then echo "::error::Onbekende agent $AGENT"; exit 1; fi
+          BRANCH="agent/$AGENT-$NR-${{ github.run_number }}"
+          git switch -c "$BRANCH"
+          echo "agent=$AGENT" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          gh issue comment "$NR" --body "🤖 Agent **$AGENT** is gestart. [Volg de voortgang]($RUN_URL)"
+
       - name: Agent aan het werk
         uses: anthropics/claude-code-action@v1
-        env:
-          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
-          PAGES_URL: ${{ steps.a.outputs.pages }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Je werkt als de agent **${{ steps.a.outputs.agent }}** van de werkplaats.
-            Repository: ${{ github.repository }} — issue #${{ github.event.issue.number }}: "${{ github.event.issue.title }}"
-            Online adres van dit project (leeg = geen hosting): ${{ steps.a.outputs.pages }}
-
-            1. Lees CLAUDE.md en daarna .claude/agents/${{ steps.a.outputs.agent }}.md. Volg die instructies precies.
-            2. Lees het issue met alle reacties: gh issue view ${{ github.event.issue.number }} --comments
-            3. Doe alleen het werk van jouw rol. Zet zelf GEEN fase-labels en verplaats geen kaartjes.
-            4. Sluit af met precies één reactie op het issue (gh issue comment), zoals je instructies beschrijven.
+            Je bent de agent "${{ steps.v.outputs.agent }}".
+            Lees CLAUDE.md en .claude/agents/${{ steps.v.outputs.agent }}.md en volg die instructies.
+            Ticket: #${{ github.event.issue.number }} "${{ github.event.issue.title }}" — lees het met: gh issue view ${{ github.event.issue.number }} --comments
+            Je staat al op branch ${{ steps.v.outputs.branch }}. Pas alleen bestanden aan: NIET committen, pushen of PR's maken.
+            Sluit af met één reactie op het ticket (gh issue comment ${{ github.event.issue.number }} --body "...").
           claude_args: >-
             --max-turns 80
-            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(gh:*),Bash(git:*),Bash(bash:*),Bash(node:*),Bash(npm:*),Bash(npx:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(curl:*),Bash(ls:*),Bash(cat:*),Bash(cp:*),Bash(mv:*),Bash(mkdir:*),Bash(sed:*),Bash(grep:*),Bash(find:*),Bash(jq:*)"
-      - name: Kaartje op "klaar"
-        if: success()
-        run: gh issue edit "$NR" -R "$REPO" --add-label agent:klaar --remove-label agent:bezig
-      - name: Kaartje op "fout"
-        if: failure()
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(bash run-tests.sh:*),Bash(node:*),Bash(npm:*),Bash(npx:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(ls:*),Bash(cat:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*)"
+
+      - name: Testen en mergen
+        env:
+          AGENT: ${{ steps.v.outputs.agent }}
+          BRANCH: ${{ steps.v.outputs.branch }}
         run: |
-          gh issue edit "$NR" -R "$REPO" --add-label agent:fout --remove-label agent:bezig || true
-          gh issue comment "$NR" -R "$REPO" --body "⚠️ De agent liep vast. Bekijk de run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} — zet het label opnieuw om het nog eens te proberen."
+          git config user.name "claude-agent"
+          git config user.email "agent@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            gh issue comment "$NR" --body "ℹ️ De agent heeft geen bestanden gewijzigd; er is niets te mergen."
+            exit 0
+          fi
+          git commit -qm "$AGENT: $TITEL (#$NR)"
+          TESTS=geslaagd
+          if [ -f run-tests.sh ]; then bash run-tests.sh > tests.log 2>&1 || TESTS=gefaald; fi
+          git push -q -u origin "$BRANCH"
+          if [ "$TESTS" = geslaagd ]; then
+            PR=$(gh pr create --base main --head "$BRANCH" --title "$AGENT: $TITEL" --body "Gemaakt door agent **$AGENT** voor #$NR.")
+            gh pr merge "$PR" --squash --delete-branch
+            gh issue comment "$NR" --body "✅ Tests geslaagd en automatisch gemerged naar main ($PR). Kies gerust een volgende agent, of sluit het ticket als het klaar is."
+          else
+            PR=$(gh pr create --draft --base main --head "$BRANCH" --title "$AGENT: $TITEL (tests falen)" --body "Tests falen; niet gemerged. Zie #$NR.")
+            {
+              echo "❌ De tests falen, dus er is **niet** gemerged. Het werk staat in $PR."
+              echo; echo "Kies \`agent: realiseren\` opnieuw om het te laten repareren, of bekijk het zelf in VS Code."
+              echo; echo '<details><summary>Testuitvoer</summary>'; echo; echo '```'; tail -n 40 tests.log; echo '```'; echo '</details>'
+            } > bericht.md
+            gh issue comment "$NR" --body-file bericht.md
+            exit 1
+          fi
+
+      - name: Label weghalen
+        # zodat je dezelfde agent later opnieuw kunt kiezen
+        if: always()
+        run: gh issue edit "$NR" --remove-label "$LABEL" || true
+
+      - name: Fout melden
+        if: failure()
+        run: gh issue comment "$NR" --body "⚠️ De agent is niet goed afgerond. [Bekijk wat er misging]($RUN_URL)" || true

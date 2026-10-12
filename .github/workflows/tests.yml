@@ -1,7 +1,8 @@
-# Draait de tests bij elke push en pull request.
+# Draait de tests bij elke push en pull request (ook als je zelf in VS Code werkt).
 name: Tests
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -16,6 +17,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -q pytest
-      - name: Tests
-        run: |
-          if [ -f run-tests.sh ]; then bash run-tests.sh; else echo "Geen run-tests.sh"; fi
+      - run: bash run-tests.sh

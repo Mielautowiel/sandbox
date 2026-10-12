@@ -1,0 +1,13 @@
+name: Ticket
+description: Een idee, uitbreiding of bug
+body:
+  - type: textarea
+    id: wat
+    attributes:
+      label: Wat wil je?
+      description: Beschrijf het idee, de wens of wat er misgaat. Screenshots kun je hier direct in plakken.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: "Daarna kies je rechts bij **Labels** een agent: `agent: prototype`, `agent: ontwerp` of `agent: realiseren`."

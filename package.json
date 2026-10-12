@@ -1,0 +1,6 @@
+{
+  "name": "project",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "bash run-tests.sh" }
+}

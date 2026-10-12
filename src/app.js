@@ -1,8 +1,10 @@
 // UI: koppelt de logica aan de pagina.
 import { addItem, removeItem } from './logic.js';
-import { load, save } from './storage.js';
 
-let items = load();
+const KEY = 'app-data';
+let items = [];
+try { items = JSON.parse(localStorage.getItem(KEY)) || []; } catch { items = []; }
+
 const form = document.getElementById('form');
 const input = document.getElementById('invoer');
 const list = document.getElementById('lijst');
@@ -20,7 +22,11 @@ function render() {
   }));
 }
 
-function update(next) { items = next; save(items); render(); }
+function update(next) {
+  items = next;
+  try { localStorage.setItem(KEY, JSON.stringify(items)); } catch { /* negeren */ }
+  render();
+}
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
