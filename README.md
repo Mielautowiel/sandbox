@@ -2,13 +2,30 @@
 
 Startpunt voor elk nieuw projectje, met drie agents die je op een ticket kunt inzetten.
 
-## Nieuw project
-1. Klik op **Use this template → Create a new repository** (privé mag).
-2. In de nieuwe repo: Settings → Secrets and variables → Actions → **New repository secret**
-   `CLAUDE_CODE_OAUTH_TOKEN` (dezelfde code als eerder, uit `claude setup-token`).
-3. Settings → Actions → General → *Workflow permissions*: **Read and write** én vink
-   **Allow GitHub Actions to create and approve pull requests** aan.
-4. Pas de twee regels bovenaan `CLAUDE.md` aan.
+## Nieuw project (één commando)
+
+**Eenmalig** in PowerShell:
+```
+winget install GitHub.cli
+```
+Open PowerShell opnieuw, dan:
+```
+gh auth login
+gh repo clone Mielautowiel/sandbox projectstarter
+cd projectstarter
+```
+
+**Per nieuw project** (in die map `projectstarter`):
+```
+powershell -ExecutionPolicy Bypass -File .\nieuw-project.ps1 boodschappenlijst
+```
+Dit maakt een privé-repo vanuit deze starter, zet het Claude-token erin, zet de Actions-rechten goed
+en opent het project in VS Code. Het token wordt alleen de eerste keer gevraagd
+(en bewaard in `%USERPROFILE%\.werkplaats\claude-token.txt`; deel dat bestand met niemand).
+
+Een bestaande repo (zoals deze) alleen instellen: `... nieuw-project.ps1 sandbox -Bestaand`.
+
+Daarna eventueel de regel **Wat:** in `CLAUDE.md` aanpassen.
 
 ## Werken met tickets
 1. **Issues → New issue → Ticket** en beschrijf wat je wilt (screenshots mogen).
