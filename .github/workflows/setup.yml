@@ -24,17 +24,33 @@ jobs:
         run: bash .github/scripts/labels.sh "$REPO"
       - name: Bord
         run: |
-          NR=$(gh project list --owner "$OWNER" --format json --jq '.projects[] | select(.title=="Werkplaats") | .number' | head -1)
-          if [ -z "$NR" ]; then
-            NR=$(gh project create --owner "$OWNER" --title "Werkplaats" --format json --jq .number)
-            gh project field-create "$NR" --owner "$OWNER" --name "Fase" --data-type SINGLE_SELECT \
-              --single-select-options "Ideeën,Inventariseren,Naar project,Prototype,Feedback,Ontwerp,Te doen,Bouwen,Testen,Review,Klaar,Geparkeerd"
-            echo "Bord aangemaakt (nummer $NR)"
+          KOLOMMEN="Ideeën,Inventariseren,Naar project,Prototype,Feedback,Ontwerp,Te doen,Bouwen,Testen,Review,Klaar,Geparkeerd"
+          VIEWER=$(gh api graphql -f query='query{viewer{id login projectsV2(first:50){nodes{id number title}}}}')
+          USER_ID=$(echo "$VIEWER" | jq -r .data.viewer.id)
+          LOGIN=$(echo "$VIEWER" | jq -r .data.viewer.login)
+          PID=$(echo "$VIEWER" | jq -r '.data.viewer.projectsV2.nodes[] | select(.title=="Werkplaats") | .id' | head -1)
+          if [ -z "$PID" ]; then
+            PID=$(gh api graphql -f query='mutation($o:ID!){createProjectV2(input:{ownerId:$o,title:"Werkplaats"}){projectV2{id}}}' \
+              -f o="$USER_ID" --jq .data.createProjectV2.projectV2.id)
+            echo "Bord aangemaakt"
           else
-            echo "Bord bestaat al (nummer $NR)"
+            echo "Bord bestaat al"
           fi
-          gh project link "$NR" --owner "$OWNER" --repo "$REPO" || true
+          HEEFT_FASE=$(gh api graphql -f query='query($p:ID!){node(id:$p){... on ProjectV2{field(name:"Fase"){... on ProjectV2SingleSelectField{id}}}}}' \
+            -f p="$PID" --jq '.data.node.field.id // empty')
+          if [ -z "$HEEFT_FASE" ]; then
+            OPTIES=$(echo "$KOLOMMEN" | jq -R 'split(",") | map({name: ., color: "GRAY", description: ""})')
+            jq -n --arg p "$PID" --argjson o "$OPTIES" \
+              '{query: "mutation($p:ID!,$o:[ProjectV2SingleSelectFieldOptionInput!]!){createProjectV2Field(input:{projectId:$p,dataType:SINGLE_SELECT,name:\"Fase\",singleSelectOptions:$o}){projectV2Field{... on ProjectV2SingleSelectField{id}}}}", variables: {p: $p, o: $o}}' \
+              | gh api graphql --input - >/dev/null
+            echo "Veld Fase aangemaakt"
+          fi
+          REPO_ID=$(gh api "repos/$REPO" --jq .node_id)
+          gh api graphql -f query='mutation($p:ID!,$r:ID!){linkProjectV2ToRepository(input:{projectId:$p,repositoryId:$r}){repository{id}}}' \
+            -f p="$PID" -f r="$REPO_ID" >/dev/null || true
+          NR=$(gh api graphql -f query='query($p:ID!){node(id:$p){... on ProjectV2{number}}}' -f p="$PID" --jq .data.node.number)
           {
             echo "## Bijna klaar"
-            echo "Open https://github.com/users/$OWNER/projects/$NR en zet de weergave op **Board** met **Column by: Fase**."
+            echo "Open https://github.com/users/$LOGIN/projects/$NR en zet de weergave op **Board** met **Column by: Fase**."
           } >> "$GITHUB_STEP_SUMMARY"
+          echo "Bord: https://github.com/users/$LOGIN/projects/$NR"

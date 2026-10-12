@@ -7,16 +7,16 @@ REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 
 bash .github/scripts/labels.sh "$REPO"
 
-NR=$(gh project list --owner "$OWNER" --format json --jq '.projects[] | select(.title=="Werkplaats") | .number' | head -1)
+NR=$(gh project list --owner "@me" --format json --jq '.projects[] | select(.title=="Werkplaats") | .number' | head -1)
 if [ -z "$NR" ]; then
-  NR=$(gh project create --owner "$OWNER" --title "Werkplaats" --format json --jq .number)
-  gh project field-create "$NR" --owner "$OWNER" --name "Fase" --data-type SINGLE_SELECT \
+  NR=$(gh project create --owner "@me" --title "Werkplaats" --format json --jq .number)
+  gh project field-create "$NR" --owner "@me" --name "Fase" --data-type SINGLE_SELECT \
     --single-select-options "Ideeën,Inventariseren,Naar project,Prototype,Feedback,Ontwerp,Te doen,Bouwen,Testen,Review,Klaar,Geparkeerd"
   echo "Bord aangemaakt: nummer $NR"
 else
   echo "Bord bestaat al: nummer $NR"
 fi
-gh project link "$NR" --owner "$OWNER" --repo "$REPO" || true
+gh project link "$NR" --owner "@me" --repo "$REPO" || true
 
 cat <<EOF
 
