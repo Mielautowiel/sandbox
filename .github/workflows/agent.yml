@@ -73,7 +73,7 @@ jobs:
             Je staat al op branch ${{ steps.v.outputs.branch }}. Pas alleen bestanden aan: NIET committen, pushen of PR's maken.
             Sluit af met één reactie op het ticket (gh issue comment ${{ github.event.issue.number }} --body "...").
           claude_args: >-
-            --max-turns 80
+            --max-turns 200
             --allowedTools "Read,Write,Edit,Glob,Grep,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(bash run-tests.sh:*),Bash(node:*),Bash(npm:*),Bash(npx:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(ls:*),Bash(cat:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*)"
 
       - name: Testen en mergen
