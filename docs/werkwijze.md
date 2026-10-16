@@ -38,7 +38,7 @@ Alleen jij (eigenaar van de repo) kunt een agent starten.
 ## 3. Op je mobiel
 - **Klein ticket:** GitHub-app → ticket maken → label `agent: realiseren` (of eerst `agent: ontwerp`).
 - **Iteratief:** Claude-app → sessie met deze repo. Claude werkt in dezelfde kleine stappen, pusht elke stap
-  en stuurt een **preview-link** (bijv. `https://lokaal-12-kalender.<project>.pages.dev`) die je op je telefoon opent.
+  en stuurt een **preview-link** (bijv. `https://lokaal-12-kalender-<project>.emiel86.workers.dev`) die je op je telefoon opent.
   Klaar? Typ `/uitleveren`.
 
 ## Eenmalig per project
@@ -49,6 +49,7 @@ powershell -ExecutionPolicy Bypass -File .\nieuw-project.ps1 <repo-naam> -Bestaa
 Dit zet de tokens, de Actions-rechten en maakt het bord met de kolommen en labels aan.
 Open daarna het bord en kies één keer **Layout: Board** bij de weergave.
 
-**Preview-links (Cloudflare Pages, gratis):** Cloudflare-dashboard → **Workers & Pages → Create → Pages →
-Connect to Git** → kies de repo → build command leeg, output directory leeg → **Save and Deploy**.
-Elke branch krijgt dan automatisch een eigen link. Zet het adres (bijv. `mijnproject.pages.dev`) bij **Preview:** bovenin `CLAUDE.md`.
+**Preview-links (Cloudflare, gratis):** Cloudflare-dashboard → **Workers & Pages → Create → Import a repository**
+→ kies de repo → **Deploy**. Daarna bij het project: **Settings → Build → Branch control** → *Builds for non-production
+branches* aanzetten. Elke branch krijgt dan een eigen link `https://<branch>-<project>.emiel86.workers.dev`.
+Zet die bij **Preview:** bovenin `CLAUDE.md`.

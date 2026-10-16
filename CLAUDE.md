@@ -3,7 +3,7 @@
 > Pas deze regels aan per project.
 **Wat:** <één zin wat dit project doet>
 **Stack:** web (HTML/CSS/JavaScript, geen build-stap) – tests met `node --test`
-**Preview:** <projectnaam>.pages.dev  (pas aan na het koppelen van Cloudflare Pages)
+**Preview:** https://<branch>-<projectnaam>.emiel86.workers.dev  (pas aan na het koppelen aan Cloudflare)
 
 ## Afspraken
 - Klein houden: hobbyproject, kleinste bruikbare versie eerst.
@@ -27,9 +27,9 @@ Twee paden; uitleg voor mensen staat in `docs/werkwijze.md`.
   Meld dan in max 4 regels: wat er veranderd is, waar je het ziet (http://localhost:8000 + scherm/klik) en of er iets te kiezen is.
   **Stop daarna en wacht op feedback.**
 - Werk je in een cloudsessie (eigenaar zit op zijn mobiel, localhost is voor hem niet te zien): push na elke stap de branch
-  (`git push -u origin HEAD`) en meld de preview-link in plaats van localhost: `https://<branch>.<Preview-domein bovenaan>`.
-  `<branch>` = branchnaam in kleine letters, `/` en andere tekens worden `-`, max 28 tekens
-  (bijv. `lokaal/12-kalender` → `https://lokaal-12-kalender.opruimmaatje.pages.dev`). Cloudflare bouwt hem in ±1 minuut.
+  (`git push -u origin HEAD`) en meld de preview-link uit **Preview:** bovenaan in plaats van localhost.
+  `<branch>` = branchnaam in kleine letters, `/` en andere tekens worden `-` (bijv. `lokaal/12-kalender` → `lokaal-12-kalender`).
+  Houd branchnamen kort. Cloudflare bouwt de preview in ±1 minuut.
 - Feedback verwerk je als een nieuwe kleine commit (geen amend of rebase), zodat elke aanpassing los te bekijken blijft.
 - Iets voor later, buiten deze stap, of input voor Claude/Claude Code die later moet gebeuren? Maak een los ticket met
   `/ticket ...` (komt in ToDo op het bord) en bouw het niet nu.
