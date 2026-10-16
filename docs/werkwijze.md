@@ -50,6 +50,6 @@ Dit zet de tokens, de Actions-rechten en maakt het bord met de kolommen en label
 Open daarna het bord en kies één keer **Layout: Board** bij de weergave.
 
 **Preview-links (Cloudflare, gratis):** Cloudflare-dashboard → **Workers & Pages → Create → Import a repository**
-→ kies de repo → **Deploy**. Daarna bij het project: **Settings → Build → Branch control** → *Builds for non-production
-branches* aanzetten. Elke branch krijgt dan een eigen link `https://<branch>-<project>.emiel86.workers.dev`.
+→ kies de repo → **Deploy**. Daarna bij het project: **Settings → Builds** → tabblad *Previews* →
+*Builds for Preview branches* aanzetten. Elke branch krijgt dan een eigen link `https://<branch>-<project>.emiel86.workers.dev`.
 Zet die bij **Preview:** bovenin `CLAUDE.md`.
