@@ -11,9 +11,26 @@
 - Geen secrets of persoonsgegevens in de code; geen dependencies zonder goede reden.
 - Code en commits in het Engels; documentatie en reacties in het Nederlands.
 
-## Agents
-Op een ticket kies je een agent met een label; ze staan in `.claude/agents/`:
-- `agent: prototype` – klikbaar wegwerp-prototype in `prototype/index.html`
-- `agent: ontwerp` – plan en takenlijst in `docs/ontwerp.md`
-- `agent: realiseren` – bouwt het echt, met tests
-Testen en mergen gaan daarna automatisch. In VS Code roep je ze aan met bijv. `@agent-realiseren`.
+## Zuinig met tokens
+- Zoek eerst met Grep en lees dan alleen het stuk dat nodig is (Read met offset/limit). Lees geen grote bestanden helemaal.
+- Pas grote bestanden aan met `Edit` op het stuk, niet het hele bestand opnieuw schrijven.
+
+## Werkwijze
+Twee paden; uitleg voor mensen staat in `docs/werkwijze.md`.
+
+**Lokaal werken (deze laptop – grotere of iteratieve aanpassingen)**
+- Werk op een branch `lokaal/...` (via `/oppakken <nr>` of zelf aangemaakt), nooit direct op main.
+- Kleine stappen: één duidelijke wijziging per keer, elk een eigen commit met een korte Engelse message. Geen ongevraagde extra's.
+- Na elke stap: `bash run-tests.sh` (als die er is) en zorg dat de preview draait: `node serve.js` op de achtergrond
+  (eerst checken met `curl -s -o /dev/null -w "%{http_code}" http://localhost:8000`; alleen starten als hij niet draait).
+  Meld dan in max 4 regels: wat er veranderd is, waar je het ziet (http://localhost:8000 + scherm/klik) en of er iets te kiezen is.
+  **Stop daarna en wacht op feedback.**
+- Feedback verwerk je als een nieuwe kleine commit (geen amend of rebase), zodat elke aanpassing los te bekijken blijft.
+- Iets voor later, buiten deze stap, of input voor Claude/Claude Code die later moet gebeuren? Maak een los ticket met
+  `/ticket ...` (komt in ToDo op het bord) en bouw het niet nu.
+- Uitleveren alleen als de eigenaar zegt dat het klaar is: `/uitleveren`.
+
+**Bord (GitHub – kleine losse tickets)**
+- Kolommen: ToDo · Review en Feedback · Realisatie · Uitlevering · Done.
+- Label `agent: realiseren`: bouwt het ticket; testen en mergen gaan automatisch.
+- Label `agent: ontwerp`: alleen als het eerst beoordeeld moet worden; geeft een kort plan als reactie.

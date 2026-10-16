@@ -1,0 +1,39 @@
+# Houdt het bord bij: nieuw of heropend ticket -> ToDo, gesloten -> Done.
+# Eenmalig (en daarna wanneer je wilt): Actions -> Bord -> Run workflow maakt het bord en de labels aan.
+name: Bord
+on:
+  issues:
+    types: [opened, reopened, closed]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  status:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BORD_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+      NR: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - run: |
+          if [ "${{ github.event.action }}" = closed ]; then S="Done"; else S="ToDo"; fi
+          bash .github/scripts/status.sh "$NR" "$S"
+
+  inrichten:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bord, kolommen en labels
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::Secret PROJECT_TOKEN ontbreekt (draai nieuw-project.ps1 met -Bestaand)"; exit 1; fi
+          bash .github/scripts/bord-inrichten.sh

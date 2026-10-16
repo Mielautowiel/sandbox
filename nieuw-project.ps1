@@ -1,15 +1,16 @@
 <#
-  Nieuw project maken vanuit de projectstarter - in een keer klaar voor gebruik.
+  Project klaarzetten voor de ontwikkelstraat - in een keer.
 
   Gebruik (in PowerShell, in de map waar dit script staat):
-    powershell -ExecutionPolicy Bypass -File .\nieuw-project.ps1 boodschappenlijst
-    powershell -ExecutionPolicy Bypass -File .\nieuw-project.ps1 sandbox -Bestaand   # alleen instellen
+    powershell -ExecutionPolicy Bypass -File .\nieuw-project.ps1 MijnProject              # nieuw project
+    powershell -ExecutionPolicy Bypass -File .\nieuw-project.ps1 OpruimMaatje -Bestaand   # bestaand project instellen
 
   Wat het doet:
-    1. maakt een prive-repo vanuit de projectstarter (Mielautowiel/sandbox)
-    2. zet het Claude-token erin als secret (vraagt het token alleen de eerste keer)
+    1. (nieuw) maakt een prive-repo vanuit de projectstarter (Mielautowiel/sandbox)
+    2. zet twee secrets: het Claude-token (vraagt het alleen de eerste keer) en je GitHub-token voor het bord
     3. zet de Actions-rechten goed (schrijven + pull requests maken)
-    4. kloont de repo en opent hem in VS Code
+    4. maakt het bord met de kolommen ToDo, Review en Feedback, Realisatie, Uitlevering, Done en de labels
+    5. (nieuw) kloont de repo en opent hem in VS Code
 #>
 param(
   [Parameter(Mandatory = $true)][string]$Naam,
@@ -19,12 +20,18 @@ param(
 
 function Stop-Met($tekst) { Write-Host $tekst -ForegroundColor Red; exit 1 }
 
-# GitHub CLI aanwezig en ingelogd?
+# GitHub CLI aanwezig, ingelogd en met rechten voor borden?
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
   Stop-Met "GitHub CLI ontbreekt. Installeer met:  winget install GitHub.cli   en open daarna PowerShell opnieuw."
 }
 gh auth status 2>$null | Out-Null
-if ($LASTEXITCODE -ne 0) { gh auth login; if ($LASTEXITCODE -ne 0) { Stop-Met "Inloggen bij GitHub mislukt." } }
+if ($LASTEXITCODE -ne 0) { gh auth login -s project,workflow; if ($LASTEXITCODE -ne 0) { Stop-Met "Inloggen bij GitHub mislukt." } }
+$status = (gh auth status 2>&1 | Out-String)
+if ($status -notmatch "'project'" -or $status -notmatch "'workflow'") {
+  Write-Host "Eenmalig: GitHub vraagt om extra rechten voor borden en workflows (browser opent)..."
+  gh auth refresh -h github.com -s project,workflow
+  if ($LASTEXITCODE -ne 0) { Stop-Met "Extra rechten toekennen mislukt." }
+}
 
 $eigenaar = (gh api user --jq .login).Trim()
 $repo = "$eigenaar/$Naam"
@@ -38,7 +45,8 @@ if (-not (Test-Path $bestand)) {
   if (-not $invoer.Trim().StartsWith("sk-ant-")) { Stop-Met "Dat lijkt geen Claude-token. Maak er een met:  claude setup-token" }
   Set-Content -Path $bestand -Value $invoer.Trim() -NoNewline
 }
-$token = (Get-Content $bestand -Raw).Trim()
+$claudeToken = (Get-Content $bestand -Raw).Trim()
+$githubToken = (gh auth token).Trim()
 
 # Repo maken vanuit het sjabloon
 if (-not $Bestaand) {
@@ -49,11 +57,22 @@ if (-not $Bestaand) {
   Start-Sleep -Seconds 5
 }
 
-# Secret en rechten
-gh secret set CLAUDE_CODE_OAUTH_TOKEN -R $repo --body $token
-if ($LASTEXITCODE -ne 0) { Stop-Met "Secret zetten mislukt." }
+# Secrets en rechten
+gh secret set CLAUDE_CODE_OAUTH_TOKEN -R $repo --body $claudeToken
+if ($LASTEXITCODE -ne 0) { Stop-Met "Claude-token zetten mislukt." }
+gh secret set PROJECT_TOKEN -R $repo --body $githubToken
+if ($LASTEXITCODE -ne 0) { Stop-Met "Bord-token zetten mislukt." }
 gh api -X PUT "repos/$repo/actions/permissions/workflow" -f default_workflow_permissions=write -F can_approve_pull_request_reviews=true | Out-Null
 if ($LASTEXITCODE -ne 0) { Stop-Met "Actions-rechten zetten mislukt." }
+
+# Bord, kolommen en labels (via de workflow "Bord" in de repo)
+$gestart = $false
+for ($i = 0; $i -lt 6 -and -not $gestart; $i++) {
+  gh workflow run bord.yml -R $repo 2>$null | Out-Null
+  if ($LASTEXITCODE -eq 0) { $gestart = $true } else { Start-Sleep -Seconds 5 }
+}
+if ($gestart) { Write-Host "Bord wordt ingericht (Actions -> Bord). Duurt ongeveer een halve minuut." }
+else { Write-Host "Kon de workflow 'Bord' niet starten; start hem zelf via Actions -> Bord -> Run workflow." -ForegroundColor Yellow }
 
 # Klonen en openen
 if (-not $Bestaand) {
@@ -63,4 +82,4 @@ if (-not $Bestaand) {
 
 Write-Host ""
 Write-Host "Klaar: https://github.com/$repo" -ForegroundColor Green
-Write-Host "Maak een ticket aan (Issues -> New issue) en kies een agent-label."
+Write-Host "Bord: https://github.com/$eigenaar?tab=projects  (open het bord '$Naam' en kies eenmalig Layout: Board)"

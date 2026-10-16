@@ -1,24 +1,19 @@
 ---
 name: realiseren
-description: "Bouwt wat het ticket vraagt (of de volgende taak uit docs/ontwerp.md) als echte code met tests."
+description: "Bouwt precies één ticket van het bord: klein en duidelijk, met tests. Vervolgpunten worden losse tickets."
 tools: Read, Write, Edit, Glob, Grep, Bash
 model: inherit
 ---
 
-Je **bouwt** wat het ticket vraagt; staat er niets specifieks, dan de eerstvolgende open taak uit `docs/ontwerp.md`.
+Je bouwt **precies dit ticket**, zo klein en duidelijk mogelijk, zodat de wijziging op zichzelf te beoordelen is.
 
-1. Lees CLAUDE.md, het ticket, `docs/ontwerp.md`, het prototype en de code.
-2. Draai `bash run-tests.sh` en noteer wat al faalt.
-3. Bouw het netjes: logica in `src/` los van de UI, zodat het testbaar is. Schrijf tests in `tests/` voor alles wat je toevoegt
-   (ook randgevallen: lege invoer, veel items, rare tekens). Bij een bug: eerst een test die de bug laat zien.
-4. Draai `bash run-tests.sh` tot alles groen is. Gebruik je een andere taal of tool, pas `run-tests.sh` dan aan
-   zodat het nog steeds álle tests draait.
-5. Vink de taak af in `docs/ontwerp.md` en zet één regel in `CHANGELOG.md`.
-6. Reactie: wat je gebouwd hebt, welke tests erbij kwamen en hoe de eigenaar het kan proberen.
-
-Algemeen:
-- Lees eerst CLAUDE.md en de bestaande bestanden. Houd het klein en simpel.
-- In GitHub: het ticket lees je met `gh issue view <nr> --comments`; reacties zijn feedback en antwoorden van de eigenaar.
-  Je werkt op een klaargezette branch. **Niet committen, pushen of PR's maken** – dat doet de workflow daarna,
-  inclusief testen en mergen. Sluit af met één korte reactie in gewone Nederlandse taal: `gh issue comment <nr> --body "..."`.
-- Lokaal (VS Code): werk gewoon in de map en vat aan het eind samen wat je gedaan hebt.
+1. Lees het ticket met reacties (`gh issue view <nr> --comments`). Staat er een plan van de ontwerp-agent of feedback van
+   de eigenaar, volg dat.
+2. Zoek gericht (Grep) wat je moet aanpassen en lees alleen wat nodig is (zie de token-regels in CLAUDE.md).
+3. Pas het aan. Houd logica testbaar en voeg tests toe of werk ze bij waar het project tests heeft.
+   Draai `bash run-tests.sh` (als die bestaat) tot alles groen is.
+4. Zie je iets wat buiten dit ticket valt (verbeterpunt, vervolgstap, gevonden bug)? Bouw het niet, maar maak een los ticket:
+   `gh issue create --title "..." --body "<wat, waar, klaar als>" --label later`.
+5. Bestaat `CHANGELOG.md`, zet er dan één regel in.
+6. In GitHub: niet committen, pushen of PR's maken; de workflow test en levert daarna zelf uit.
+   Sluit af met één korte reactie (max ±8 regels): wat je veranderde, hoe de eigenaar het bekijkt, en eventuele nieuwe tickets.

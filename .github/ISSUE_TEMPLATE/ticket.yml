@@ -1,13 +1,22 @@
 name: Ticket
-description: Een idee, uitbreiding of bug
+description: Een idee, aanpassing of bug
 body:
   - type: textarea
     id: wat
     attributes:
-      label: Wat wil je?
-      description: Beschrijf het idee, de wens of wat er misgaat. Screenshots kun je hier direct in plakken.
+      label: Wat moet er gebeuren?
+      description: Kort en concreet. Screenshots kun je hier direct in plakken.
     validations:
       required: true
+  - type: textarea
+    id: klaar
+    attributes:
+      label: Klaar als
+      description: "Optioneel: 1-3 punten waaraan je ziet dat het klaar is."
   - type: markdown
     attributes:
-      value: "Daarna kies je rechts bij **Labels** een agent: `agent: prototype`, `agent: ontwerp` of `agent: realiseren`."
+      value: |
+        Het ticket komt vanzelf in **ToDo** op het bord. Daarna kies je:
+        - label `agent: realiseren` – de agent bouwt het; testen en mergen gaan automatisch;
+        - label `agent: ontwerp` – eerst een kort plan om te beoordelen;
+        - of lokaal in VS Code: `/oppakken <nummer>`.

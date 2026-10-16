@@ -1,9 +1,11 @@
-# Kies een agent op een ticket door het label "agent: prototype", "agent: ontwerp" of "agent: realiseren" te zetten.
-# De agent doet zijn werk; daarna draaien de tests en wordt het bij groen automatisch gemerged naar main.
+# Bord-pad: zet op een ticket het label "agent: ontwerp" of "agent: realiseren".
+#   ontwerp    -> Realisatie -> kort plan als reactie -> Review en Feedback
+#   realiseren -> Realisatie -> Uitlevering (testen + mergen) -> Done
+#                 (tests rood of geen wijzigingen -> Review en Feedback)
 name: Agent
 on:
   issues:
-    types: [opened, labeled]
+    types: [labeled]
 
 permissions:
   contents: write
@@ -12,22 +14,8 @@ permissions:
   id-token: write
 
 jobs:
-  labels:
-    # Zorgt dat de agent-labels bestaan (bij het eerste ticket in een nieuwe repo).
-    if: github.event.action == 'opened'
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      R: ${{ github.repository }}
-    steps:
-      - run: |
-          gh label create "agent: prototype" -R "$R" --color 8957e5 --description "Agent maakt een klikbaar prototype" --force
-          gh label create "agent: ontwerp" -R "$R" --color fbca04 --description "Agent werkt het idee uit tot ontwerp en takenlijst" --force
-          gh label create "agent: realiseren" -R "$R" --color 0e8a16 --description "Agent bouwt het, met tests" --force
-
   agent:
     if: >-
-      github.event.action == 'labeled' &&
       startsWith(github.event.label.name, 'agent: ') &&
       github.event.sender.login == github.repository_owner
     runs-on: ubuntu-latest
@@ -35,6 +23,7 @@ jobs:
     concurrency: agent-${{ github.event.issue.number }}
     env:
       GH_TOKEN: ${{ github.token }}
+      BORD_TOKEN: ${{ secrets.PROJECT_TOKEN }}
       NR: ${{ github.event.issue.number }}
       TITEL: ${{ github.event.issue.title }}
       LABEL: ${{ github.event.label.name }}
@@ -46,20 +35,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -q pytest
 
       - name: Voorbereiden
         id: v
         run: |
           AGENT="${LABEL#agent: }"
-          if [ ! -f ".claude/agents/$AGENT.md" ]; then echo "::error::Onbekende agent $AGENT"; exit 1; fi
+          if [ ! -f ".claude/agents/$AGENT.md" ]; then
+            gh issue comment "$NR" --body "⚠️ Onbekende agent '$AGENT'. Kies \`agent: ontwerp\` of \`agent: realiseren\`."
+            exit 1
+          fi
+          # Model en maximum aantal beurten per agent (klein houden spaart tokens).
+          case "$AGENT" in
+            ontwerp)    MODEL=sonnet; TURNS=30 ;;
+            realiseren) MODEL=sonnet; TURNS=80 ;;
+            *)          MODEL=sonnet; TURNS=40 ;;
+          esac
           BRANCH="agent/$AGENT-$NR-${{ github.run_number }}"
           git switch -c "$BRANCH"
-          echo "agent=$AGENT" >> "$GITHUB_OUTPUT"
-          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          {
+            echo "agent=$AGENT"; echo "model=$MODEL"; echo "turns=$TURNS"; echo "branch=$BRANCH"
+            echo "start=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+          bash .github/scripts/status.sh "$NR" "Realisatie"
           gh issue comment "$NR" --body "🤖 Agent **$AGENT** is gestart. [Volg de voortgang]($RUN_URL)"
 
       - name: Agent aan het werk
@@ -67,18 +64,31 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Je bent de agent "${{ steps.v.outputs.agent }}".
-            Lees CLAUDE.md en .claude/agents/${{ steps.v.outputs.agent }}.md en volg die instructies.
-            Ticket: #${{ github.event.issue.number }} "${{ github.event.issue.title }}" — lees het met: gh issue view ${{ github.event.issue.number }} --comments
-            Je staat al op branch ${{ steps.v.outputs.branch }}. Pas alleen bestanden aan: NIET committen, pushen of PR's maken.
+            Je bent de agent "${{ steps.v.outputs.agent }}". Volg .claude/agents/${{ steps.v.outputs.agent }}.md (CLAUDE.md is al geladen).
+            Ticket: #${{ github.event.issue.number }} — lees het met: gh issue view ${{ github.event.issue.number }} --comments
+            Je staat al op branch ${{ steps.v.outputs.branch }}. NIET committen, pushen of PR's maken.
             Sluit af met één reactie op het ticket (gh issue comment ${{ github.event.issue.number }} --body "...").
           claude_args: >-
-            --max-turns 200
-            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(bash run-tests.sh:*),Bash(node:*),Bash(npm:*),Bash(npx:*),Bash(python:*),Bash(python3:*),Bash(pip:*),Bash(ls:*),Bash(cat:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*)"
+            --max-turns ${{ steps.v.outputs.turns }}
+            --model ${{ steps.v.outputs.model }}
+            --allowedTools "Read,Write,Edit,Glob,Grep,Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue create:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(bash run-tests.sh:*),Bash(VERBOSE=1 bash run-tests.sh:*),Bash(node:*),Bash(npm:*),Bash(npx:*),Bash(ls:*),Bash(cat:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),Bash(git rm:*)"
 
-      - name: Testen en mergen
+      - name: Nieuwe vervolgtickets op het bord
+        if: always() && steps.v.outputs.start != ''
         env:
-          AGENT: ${{ steps.v.outputs.agent }}
+          START: ${{ steps.v.outputs.start }}
+        run: |
+          for n in $(gh issue list --label later --state open --search "created:>=$START" --json number --jq '.[].number'); do
+            bash .github/scripts/status.sh "$n" "ToDo"
+          done
+
+      - name: Ontwerp klaar
+        if: steps.v.outputs.agent == 'ontwerp'
+        run: bash .github/scripts/status.sh "$NR" "Review en Feedback"
+
+      - name: Testen en uitleveren
+        if: steps.v.outputs.agent != 'ontwerp'
+        env:
           BRANCH: ${{ steps.v.outputs.branch }}
         run: |
           git config user.name "claude-agent"
@@ -88,22 +98,27 @@ jobs:
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git add -A
           if git diff --cached --quiet; then
-            gh issue comment "$NR" --body "ℹ️ De agent heeft geen bestanden gewijzigd; er is niets te mergen."
+            bash .github/scripts/status.sh "$NR" "Review en Feedback"
+            gh issue comment "$NR" --body "ℹ️ Geen wijzigingen, dus niets uit te leveren. Lees de reactie van de agent; mogelijk heeft hij een vraag."
             exit 0
           fi
-          git commit -qm "$AGENT: $TITEL (#$NR)"
+          bash .github/scripts/status.sh "$NR" "Uitlevering"
+          git commit -qm "$TITEL (#$NR)"
           TESTS=geslaagd
           if [ -f run-tests.sh ]; then bash run-tests.sh > tests.log 2>&1 || TESTS=gefaald; fi
           git push -q -u origin "$BRANCH"
           if [ "$TESTS" = geslaagd ]; then
-            PR=$(gh pr create --base main --head "$BRANCH" --title "$AGENT: $TITEL" --body "Gemaakt door agent **$AGENT** voor #$NR.")
+            PR=$(gh pr create --base main --head "$BRANCH" --title "$TITEL" --body "Gemaakt door agent **realiseren**. Closes #$NR")
             gh pr merge "$PR" --squash --delete-branch
-            gh issue comment "$NR" --body "✅ Tests geslaagd en automatisch gemerged naar main ($PR). Kies gerust een volgende agent, of sluit het ticket als het klaar is."
+            gh issue close "$NR" --reason completed >/dev/null 2>&1 || true
+            bash .github/scripts/status.sh "$NR" "Done"
+            gh issue comment "$NR" --body "✅ Tests geslaagd en uitgeleverd naar main ($PR). Nog iets anders? Maak een nieuw ticket of heropen dit ticket."
           else
-            PR=$(gh pr create --draft --base main --head "$BRANCH" --title "$AGENT: $TITEL (tests falen)" --body "Tests falen; niet gemerged. Zie #$NR.")
+            PR=$(gh pr create --draft --base main --head "$BRANCH" --title "$TITEL (tests falen)" --body "Tests falen; niet gemerged. Zie #$NR.")
+            bash .github/scripts/status.sh "$NR" "Review en Feedback"
             {
-              echo "❌ De tests falen, dus er is **niet** gemerged. Het werk staat in $PR."
-              echo; echo "Kies \`agent: realiseren\` opnieuw om het te laten repareren, of bekijk het zelf in VS Code."
+              echo "❌ De tests falen, dus er is **niet** uitgeleverd. Het werk staat in $PR."
+              echo; echo "Zet \`agent: realiseren\` opnieuw om het te laten repareren, of pak het lokaal op met \`/oppakken $NR\`."
               echo; echo '<details><summary>Testuitvoer</summary>'; echo; echo '```'; tail -n 40 tests.log; echo '```'; echo '</details>'
             } > bericht.md
             gh issue comment "$NR" --body-file bericht.md
@@ -117,4 +132,6 @@ jobs:
 
       - name: Fout melden
         if: failure()
-        run: gh issue comment "$NR" --body "⚠️ De agent is niet goed afgerond. [Bekijk wat er misging]($RUN_URL)" || true
+        run: |
+          bash .github/scripts/status.sh "$NR" "Review en Feedback" || true
+          gh issue comment "$NR" --body "⚠️ De agent is niet goed afgerond. [Bekijk wat er misging]($RUN_URL)" || true
