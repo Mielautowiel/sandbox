@@ -31,7 +31,9 @@ Het Claude-token wordt alleen de eerste keer gevraagd en bewaard in `%USERPROFIL
 
 Een **bestaand** project instellen of bijwerken: `... nieuw-project.ps1 OpruimMaatje -Bestaand`.
 
-Open daarna het bord en kies één keer **Layout: Board** bij de weergave. Pas de regel **Wat:** in `CLAUDE.md` aan.
+Open daarna het bord en kies één keer **Layout: Board** bij de weergave. Pas de regels **Wat:** en **Preview:** in `CLAUDE.md` aan.
+
+Voor preview-links op je mobiel: koppel de repo aan **Cloudflare Pages** (zie `docs/werkwijze.md`, onderaan).
 
 ## Lokaal bekijken
 ```
